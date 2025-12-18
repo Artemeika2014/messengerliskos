@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Лискос | 2025 Messenger</title>
+    
+    <!-- Подключение библиотек только через HTTPS (для GitHub) -->
+    <script src="cdn.jsdelivr.net"></script>
+
+    <style>
+        :root {
+            --accent: #6366f1;
+            --bg: #020617;
+            --glass: rgba(255, 255, 255, 0.03);
+            --border: rgba(255, 255, 255, 0.1);
+            --text: #f8fafc;
+        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; transition: 0.2s; }
+        body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        
+        /* Экраны */
+        .screen { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.98); backdrop-filter: blur(25px); z-index: 100; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        .active-screen { display: flex !important; }
+
+        /* Карточка */
+        .card { background: var(--glass); border: 1px solid var(--border); padding: 40px; border-radius: 32px; width: 90%; max-width: 420px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+        .input { width: 100%; padding: 15px; margin: 10px 0; border-radius: 12px; border: 1px solid var(--border); background: rgba(0,0,0,0.4); color: white; outline: none; font-size: 16px; }
+        .btn { width: 100%; padding: 15px; border-radius: 12px; border: none; background: var(--accent); color: white; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 16px; }
+        .btn:hover { background: #4f46e5; transform: translateY(-2px); }
+        
+        .pin-display { background: #fef9c3; color: #854d0e; padding: 15px; border-radius: 16px; font-weight: 800; font-size: 28px; margin-bottom: 20px; border: 2px dashed #eab308; }
+        .ava-picker { width: 110px; height: 110px; border-radius: 35px; margin: 15px auto; cursor: pointer; border: 4px solid var(--accent); display: block; object-fit: cover; }
+
+        /* Приложение */
+        .app { width: 95vw; height: 90vh; max-width: 1100px; background: var(--glass); border: 1px solid var(--border); border-radius: 28px; display: flex; overflow: hidden; }
+        .sidebar { width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .main-chat { flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.01); }
+        .header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+        .user-list { flex: 1; overflow-y: auto; }
+        .user-item { padding: 15px 20px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.02); }
+        .user-item:hover { background: rgba(255,255,255,0.05); }
+        
+        #chat-area { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .msg { max-width: 75%; padding: 12px 18px; border-radius: 18px; font-size: 15px; }
+        .msg.own { align-self: flex-end; background: var(--accent); border-bottom-right-radius: 4px; }
+        .msg.other { align-self: flex-start; background: rgba(255,255,255,0.1); border-bottom-left-radius: 4px; }
+        
+        .input-bar { padding: 20px; display: flex; gap: 12px; border-top: 1px solid var(--border); }
+        .ava-img { width: 44px; height: 44px; border-radius: 12px; background: #1e293b; }
+    </style>
+</head>
+<body>
+
+    <!-- Экраны авторизации -->
+    <div id="sc-start" class="screen active-screen">
+        <div class="card">
+            <h1 style="font-size: 3.5rem; margin: 0; color: var(--accent); letter-spacing: -3px;">ЛИСКОС</h1>
+            <p style="opacity: 0.6; margin: 10px 0 30px 0;">будущие общения уже сдесь</p>
+            <button class="btn" onclick="showAuth('reg')">Создать профиль</button>
+            <button class="btn" style="background:transparent; border:1px solid var(--accent)" onclick="showAuth('login')">Войти</button>
+        </div>
+    </div>
+
+    <div id="sc-auth" class="screen">
+        <div class="card">
+            <h2 id="auth-title">Вход</h2>
+            <input type="text" id="phone" class="input" placeholder="Номер телефона">
+            <input type="password" id="pass" class="input" placeholder="Пароль">
+            <div id="login-fields" style="display:none">
+                <input type="text" id="pin-login" class="input" placeholder="Ваш ПИН-код" maxlength="4">
+            </div>
+            <button class="btn" onclick="handleAuthStep1()">Продолжить</button>
+        </div>
+    </div>
+
+    <div id="sc-setup" class="screen">
+        <div class="card">
+            <div class="pin-display">ПИН: <span id="generated-pin">0000</span></div>
+            <img id="setup-ava" class="ava-picker" src="api.dicebear.com" onclick="refreshAva()">
+            <p style="font-size: 12px; opacity: 0.5;">Нажмите для смены фото</p>
+            <input type="text" id="f-name" class="input" placeholder="Ваше Имя">
+            <input type="text" id="f-user" class="input" placeholder="@username">
+            <button class="btn" onclick="finalizeRegistration()">Завершить</button>
+        </div>
+    </div>
+
+    <!-- Основной интерфейс -->
+    <div id="sc-app" class="app" style="display:none">
+        <div class="sidebar">
+            <div class="header">
+                <img id="my-ava" class="ava-img" src="">
+                <b id="my-name">...</b>
+            </div>
+            <div id="user-list" class="user-list"></div>
+        </div>
+        <div class="main-chat">
+            <div class="header" id="chat-title" style="font-weight:bold; color:var(--accent)">Выберите чат</div>
+            <div id="chat-area"></div>
+            <div class="input-bar">
+                <input type="text" id="mi" class="input" style="margin:0" placeholder="Сообщение..." onkeydown="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()" class="btn" style="width:60px; margin:0">✈</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация переменных
+        var authMode = 'login';
+        var myData = null;
+        var tempPin = '';
+        var currentAvaUrl = 'api.dicebear.com';
+        var activeChatPhone = null;
+        var supabase = null;
+
+        // Данные Supabase
+        const SB_URL = "https://jjwjqcwnxszujktzvjve.supabase.co";
+        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impqd2pxY3dueHN6dWprdHp2anZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzE5NzMsImV4cCI6MjA4MTY0Nzk3M30.rhDX9wPSwDuMaW9OikbT8GE1YuqeOHvHcUYvQAgcnaY";
+
+        // Функция безопасного подключения
+        window.addEventListener('load', () => {
+            if (typeof window.supabase !== 'undefined') {
+                supabase = window.supabase.createClient(SB_URL, SB_KEY);
+                console.log("Supabase подключен через GitHub HTTPS");
+            }
+        });
+
+        function showAuth(m) {
+            authMode = m;
+            document.getElementById('sc-start').classList.remove('active-screen');
+            document.getElementById('sc-auth').classList.add('active-screen');
+            document.getElementById('auth-title').innerText = (m === 'reg' ? 'Регистрация' : 'Вход');
+            document.getElementById('login-fields').style.display = (m === 'reg' ? 'none' : 'block');
+        }
+
+        function refreshAva() {
+            const seed = Math.floor(Math.random() * 1000000);
+            currentAvaUrl = `api.dicebear.com{seed}`;
+            document.getElementById('setup-ava').src = currentAvaUrl;
+        }
+
+        async function handleAuthStep1() {
+            if (!supabase) return alert("База еще не загружена...");
+            const phone = document.getElementById('phone').value.trim();
+            const pass = document.getElementById('pass').value;
+
+            if (authMode === 'reg') {
+                tempPin = Math.floor(1000 + Math.random() * 9000).toString();
+                document.getElementById('generated-pin').innerText = tempPin;
+                document.getElementById('sc-auth').classList.remove('active-screen');
+                document.getElementById('sc-setup').classList.add('active-screen');
+                refreshAva();
+            } else {
+                const pin = document.getElementById('pin-login').value;
+                const { data, error } = await supabase.from('chat_users').select('*').eq('phone', phone).eq('password', pass).eq('secret_code', pin).single();
+                if (error || !data) return alert("Ошибка входа!");
+                myData = data;
+                startApp();
+            }
+        }
+
+        async function finalizeRegistration() {
+            const phone = document.getElementById('phone').value.trim();
+            const pass = document.getElementById('pass').value;
+            const name = document.getElementById('f-name').value.trim();
+            const user = document.getElementById('f-user').value.trim().replace('@', '');
+
+            if (!name || !user) return alert("Заполните все поля");
+
+            const { error } = await supabase.from('chat_users').insert([{
+                phone: phone, password: pass, secret_code: tempPin,
+                full_name: name, username: user, avatar_url: currentAvaUrl
+            }]);
+
+            if (error) return alert("Ошибка: " + error.message);
+            alert("Ваш ПИН для входа: " + tempPin);
+            location.reload();
+        }
+
+        async function startApp() {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
+            document.getElementById('sc-app').style.display = 'flex';
+            document.getElementById('my-name').innerText = myData.full_name;
+            document.getElementById('my-ava').src = myData.avatar_url;
+
+            const { data: users } = await supabase.from('chat_users').select('*').neq('phone', myData.phone);
+            document.getElementById('user-list').innerHTML = users.map(u => `
+                <div class="user-item" onclick="selectChat('${u.phone}', '${u.full_name}')">
+                    <img src="${u.avatar_url}" class="ava-img">
+                    <div><b>${u.full_name}</b><br><small>@${u.username}</small></div>
+                </div>
+            `).join('');
+
+            // Подписка Realtime
+            supabase.channel('msgs').on('postgres_changes', { event: 'INSERT', table: 'messages' }, () => {
+                loadMessages();
+            }).subscribe();
+        }
+
+        function selectChat(phone, name) {
+            activeChatPhone = phone;
+            document.getElementById('chat-title').innerText = name;
+            loadMessages();
+        }
+
+        async function loadMessages() {
+            if (!activeChatPhone) return;
+            const { data } = await supabase.from('messages')
+                .select('*')
+                .or(`and(sender.eq.${myData.phone},receiver.eq.${activeChatPhone}),and(sender.eq.${activeChatPhone},receiver.eq.${myData.phone})`)
+                .order('created_at', { ascending: true });
+
+            const area = document.getElementById('chat-area');
+            area.innerHTML = (data || []).map(m => `
+                <div class="msg ${m.sender === myData.phone ? 'own' : 'other'}">${m.content}</div>
+            `).join('');
+            area.scrollTop = area.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const inp = document.getElementById('mi');
+            if (!inp.value.trim() || !activeChatPhone) return;
+            await supabase.from('messages').insert([{ 
+                sender: myData.phone, receiver: activeChatPhone, content: inp.value 
+            }]);
+            inp.value = '';
+            loadMessages();
+        }
+    </script>
+</body>
+</html>
